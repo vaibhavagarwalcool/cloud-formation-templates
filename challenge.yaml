@@ -1,0 +1,142 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Template to create a VPC, a NAT Gateway, a Security Group, a Private Subnet, and an EC2 instance.
+
+Resources:
+  # Create a VPC
+  MyVPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: '10.0.0.0/16'
+      Tags:
+        - Key: Name
+          Value: MyVPC
+
+  # Create an Internet Gateway
+  MyInternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: MyInternetGateway
+
+  # Attach the Internet Gateway to the VPC
+  VPCInternetGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref MyVPC
+      InternetGatewayId: !Ref MyInternetGateway
+
+  # Create a Public Subnet for the NAT Gateway
+  MyPublicSubnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: '10.0.0.0/24'
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: MyPublicSubnet
+
+  # Create a Private Subnet
+  MyPrivateSubnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: '10.0.1.0/24'
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: MyPrivateSubnet
+
+  # Create a NAT Gateway EIP
+  MyEIP:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: 'vpc'
+
+  # Create a NAT Gateway
+  MyNATGateway:
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      AllocationId: !GetAtt MyEIP.AllocationId
+      SubnetId: !Ref MyPublicSubnet
+      Tags:
+        - Key: Name
+          Value: MyNATGateway
+
+  # Create a Route Table for the Private Subnet
+  MyPrivateRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref MyVPC
+
+  # Create a Route to the NAT Gateway in the Private Route Table
+  MyPrivateRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: MyNATGateway
+    Properties:
+      RouteTableId: !Ref MyPrivateRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref MyNATGateway
+
+  # Associate the Private Route Table with the Private Subnet
+  MyPrivateSubnetRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref MyPrivateSubnet
+      RouteTableId: !Ref MyPrivateRouteTable
+
+  # Create a Security Group
+  MySecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Allow SSH access from anywhere'
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: 'tcp'
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: '0.0.0.0/0'
+
+  # Create an EC2 Instance
+  MyEC2Instance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      InstanceType: 't3.micro'
+      ImageId: 'ami-0abcdef1234567890' # Replace with a valid AMI ID for your region
+      SubnetId: !Ref MyPrivateSubnet
+      SecurityGroupIds:
+        - !Ref MySecurityGroup
+      Tags:
+        - Key: Name
+          Value: MyEC2Instance
+
+Outputs:
+  VPCId:
+    Description: 'VPC ID'
+    Value: !Ref MyVPC
+
+  InternetGatewayId:
+    Description: 'Internet Gateway ID'
+    Value: !Ref MyInternetGateway
+
+  PublicSubnetId:
+    Description: 'Public Subnet ID'
+    Value: !Ref MyPublicSubnet
+
+  PrivateSubnetId:
+    Description: 'Private Subnet ID'
+    Value: !Ref MyPrivateSubnet
+
+  NATGatewayId:
+    Description: 'NAT Gateway ID'
+    Value: !Ref MyNATGateway
+
+  SecurityGroupId:
+    Description: 'Security Group ID'
+    Value: !Ref MySecurityGroup
+
+  EC2InstanceId:
+    Description: 'EC2 Instance ID'
+    Value: !Ref MyEC2Instance
